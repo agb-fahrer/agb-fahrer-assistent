@@ -30,6 +30,7 @@ function editSegment(job,segment){
 }
 $('syncSegment').onclick=()=>run(async()=>{if(!editing)throw Error('Kein zentraler Abschnitt geladen.');const s=window.AGBMeasure.getActive().segment;if(s.points.length<2)throw Error('Mindestens zwei Messpunkte erforderlich.');if(!confirm('Diesen Abschnitt zentral aktualisieren?'))return;await call('updateSegment',{token,jobId:editing.jobId,segmentId:editing.segmentId,revision:editing.revision,segment:s});editing=null;$('syncPanel').hidden=true;await refresh();note('Abschnitt erfolgreich zentral synchronisiert.');});
 $('syncCancel').onclick=()=>{if(!confirm('Zentrale Bearbeitung verlassen? Nicht übertragene Änderungen bleiben nur in der Messansicht.'))return;editing=null;$('syncPanel').hidden=true;note('Zentrale Bearbeitung beendet.')};
+window.addEventListener('agb:new-measurement',()=>{editing=null;$('syncPanel').hidden=true;note('Neue Messung gestartet. Zentrale Abschnittsbearbeitung beendet.');});
 function setJobTab(){ $('tabActive').classList.toggle('selected',jobView==='active');$('tabArchive').classList.toggle('selected',jobView==='archive');}
 $('tabActive').onclick=()=>{jobView='active';setJobTab();renderJobs()};
 $('tabArchive').onclick=()=>{if(user?.role!=='admin')return;jobView='archive';setJobTab();renderJobs()};
