@@ -31,12 +31,12 @@ function persist(list){try{localStorage.setItem(key,JSON.stringify(list));return
   if(!list.length){box.textContent='Noch keine Messungen gespeichert.';return}
   const mergeBar=document.createElement('div');mergeBar.style.cssText='display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0';
   const mergeBtn=document.createElement('button');mergeBtn.type='button';mergeBtn.textContent='🔗 Ausgewählte zu einem Einsatz zusammenführen';
-  const mergeInfo=document.createElement('span');mergeInfo.textContent='Messungen auswählen (mindestens 2)';
-  function updateMerge(){mergeInfo.textContent=selectedLocal.size+' Messungen ausgewählt';mergeBtn.disabled=selectedLocal.size<2;}
+  const mergeInfo=document.createElement('span');mergeInfo.textContent='Mindestens eine Messung auswählen';
+  function updateMerge(){mergeInfo.textContent=selectedLocal.size+' Messungen ausgewählt';mergeBtn.disabled=selectedLocal.size<1;}
   mergeBtn.addEventListener('click',()=>{
    try{
     const latest=storage();const picks=[...selectedLocal].sort((a,b)=>a-b).map(i=>latest[i]);
-    if(picks.length<2||picks.some(x=>!x))throw Error('Bitte mindestens zwei gültige Messungen auswählen.');
+    if(picks.length<1||picks.some(x=>!x))throw Error('Bitte mindestens eine gültige Messung auswählen.');
     const joined=[];
     picks.forEach((item,sourceIndex)=>{
      if(!Array.isArray(item.segments))throw Error('Eine ausgewählte Messung hat keine gültigen Abschnitte.');

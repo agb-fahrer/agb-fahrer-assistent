@@ -16,7 +16,35 @@ $('loginBtn').onclick=()=>run(async()=>{const x=await call('login',{name:$('logi
 $('logoutBtn').onclick=logout;
 async function refresh(){jobs=await call('jobs',{token});if(user.role==='admin'){users=await call('users',{token});renderUsers()}renderJobs();note(jobs.length+' zentrale Einsätze geladen.')}
 $('refreshJobs').onclick=()=>run(refresh);
-$('sendJob').onclick=()=>run(async()=>{if(editing)throw Error('Du bearbeitest einen zentralen Abschnitt. Bitte zuerst zentral aktualisieren oder Bearbeitung verlassen.');const m=window.AGBMeasure.get();if(!m.title||!m.segments.some(s=>s.points?.length>=2))throw Error('Bitte Einsatz benennen und mindestens zwei GPS-Punkte setzen.');if(!confirm('Messung als neuen zentralen Einsatz speichern?'))return;const r=await call('createJob',{token,title:m.title,segments:m.segments});window.AGBMeasure.reset();await refresh();note('Einsatz zentral gespeichert: '+r.id+' · Neue Messung ist leer und bereit.')});
+// Sichtbare Bestätigung und Fehlermeldungen direkt am Speicherbutton.
+const sendButton=$('sendJob');
+const sendFeedback=document.createElement('div');sendFeedback.id='sendJobFeedback';sendFeedback.setAttribute('role','status');sendFeedback.style.cssText='width:100%;padding:8px 10px;margin:8px 0;border-radius:6px;background:#eef6ff;color:#16385a;white-space:pre-wrap';sendFeedback.textContent='Bereit: Lokale Messung laden und hier zentral speichern.';
+sendButton.insertAdjacentElement('afterend',sendFeedback);
+let sendArmed=false,sendBusy=false;
+function resetSendButton(){sendArmed=false;sendButton.textContent='Aktuelle Messung zentral speichern';sendButton.disabled=false;}
+sendButton.addEventListener('click',async()=>{
+ if(sendBusy)return;
+ try{
+  sendFeedback.textContent='Prüfe die aktuelle Messung …';
+  if(!user||!token)throw Error('Bitte zuerst in der zentralen Einsatzverwaltung anmelden.');
+  if(!ready)throw Error('Die Google-Datenverbindung ist noch nicht bereit.');
+  if(editing)throw Error('Zentrale Abschnittsbearbeitung aktiv. Bitte zuerst „Bearbeitung verlassen“ wählen.');
+  if(!window.AGBMeasure||typeof window.AGBMeasure.get!=='function')throw Error('Vermessungsmodul ist nicht geladen.');
+  const m=window.AGBMeasure.get();
+  if(!m.title)throw Error('Bitte oben unter „Bezeichnung / Auftrag“ einen Einsatznamen eingeben.');
+  const complete=(m.segments||[]).filter(s=>Array.isArray(s.points)&&s.points.length>=2);
+  if(!complete.length)throw Error('Die geladene Messung benötigt mindestens einen Abschnitt mit zwei GPS-Punkten.');
+  if(complete.length!==m.segments.length)throw Error('Ein Abschnitt enthält weniger als zwei GPS-Punkte. Bitte diesen Abschnitt vervollständigen oder entfernen.');
+  if(!sendArmed){sendArmed=true;sendButton.textContent='✓ Zentral speichern bestätigen';sendFeedback.textContent='Bereit: „'+m.title+'“ mit '+complete.length+' Abschnitt(en). Zum Übertragen erneut auf „Zentral speichern bestätigen“ klicken. Lokale Sicherungen bleiben erhalten.';return;}
+  sendBusy=true;sendButton.disabled=true;sendFeedback.textContent='Übertrage „'+m.title+'“ an die zentrale Einsatzverwaltung …';
+  const r=await call('createJob',{token,title:m.title,segments:m.segments});
+  resetSendButton();sendBusy=false;
+  // Die lokale Kopie bleibt gespeichert. Nur die geöffnete Ansicht wird zurückgesetzt.
+  window.AGBMeasure.reset();
+  sendFeedback.textContent='Erfolgreich zentral gespeichert: „'+m.title+'“ ('+complete.length+' Abschnitte). Einsatz-ID: '+(r?.id||'vergeben');
+  try{await refresh()}catch(e){sendFeedback.textContent+='\nDer Einsatz wurde angelegt, aber die Liste konnte nicht aktualisiert werden: '+e.message;}
+ }catch(e){sendBusy=false;resetSendButton();sendFeedback.textContent='Zentrales Speichern nicht möglich: '+e.message;note('Fehler: '+e.message);console.error('AGB Zentrales Speichern',e);}
+});
 $('addDriver').onclick=()=>run(async()=>{const name=$('newDriver').value.trim(),password=$('newPassword').value;if(!name||password.length<12)throw Error('Name und Passwort mit mindestens 12 Zeichen eingeben.');await call('addUser',{token,name,password});$('newDriver').value='';$('newPassword').value='';await refresh()});
 function button(label,handler){const b=document.createElement('button');b.textContent=label;b.onclick=()=>run(handler);return b}
 function renderUsers(){const box=$('driverList');box.replaceChildren();users.filter(u=>u.role==='driver').forEach(u=>{const row=document.createElement('div');row.className='savedItem';const span=document.createElement('span');span.textContent=u.name+(u.active?' · aktiv':' · gesperrt');row.append(span,button(u.active?'Sperren':'Aktivieren',async()=>{if(!confirm('Benutzerstatus ändern?'))return;await call('setUserActive',{token,id:u.id,active:!u.active});await refresh()}),button('Passwort ändern',async()=>{const p=prompt('Neues Passwort (mind. 12 Zeichen):');if(p===null)return;await call('resetPassword',{token,id:u.id,password:p});note('Passwort geändert.')}));box.append(row)})}
