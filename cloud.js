@@ -14,7 +14,19 @@ $('saveOwnPassword').onclick=()=>run(async()=>{const oldPassword=$('oldPassword'
 $('connectBackend').onclick=()=>{const url=$('backendUrl').value.trim();localStorage.setItem('agb_v3_backend',url);for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('Verbindung wurde neu eingerichtet.'))}pending.clear();frame?.remove();frame=null;bridgeWindow=null;bridgeOrigin=ORIGIN;ready=false;setupFrame()};
 $('loginBtn').onclick=()=>run(async()=>{const x=await call('login',{name:$('loginName').value,password:$('loginPassword').value});token=x.token;user=x.user;sessionStorage.setItem('agb_v3_token',token);$('loginPassword').value='';if(user.mustChangePassword){showPasswordPanel();return;}showSession();note('Angemeldet.');await refresh()});
 $('logoutBtn').onclick=logout;
-async function refresh(){jobs=await call('jobs',{token});if(user.role==='admin'){users=await call('users',{token});renderUsers()}renderJobs();note(jobs.length+' zentrale Einsätze geladen.')}
+let refreshing=null;
+async function refresh(){
+ if(refreshing)return refreshing;
+ refreshing=(async()=>{
+  note('Lade zentrale Einsätze …');
+  // Unabhängige Leseanfragen gleichzeitig statt nacheinander ausführen.
+  const [newJobs,newUsers]=await Promise.all([call('jobs',{token}),user.role==='admin'?call('users',{token}):Promise.resolve([])]);
+  jobs=newJobs;users=newUsers;
+  if(user.role==='admin')renderUsers();
+  renderJobs();note(jobs.length+' zentrale Einsätze geladen.');
+ })();
+ try{return await refreshing}finally{refreshing=null}
+}
 $('refreshJobs').onclick=()=>run(refresh);
 // Sichtbare Bestätigung und Fehlermeldungen direkt am Speicherbutton.
 const sendButton=$('sendJob');
@@ -47,7 +59,25 @@ sendButton.addEventListener('click',async()=>{
 });
 $('addDriver').onclick=()=>run(async()=>{const name=$('newDriver').value.trim(),password=$('newPassword').value;if(!name||password.length<12)throw Error('Name und Passwort mit mindestens 12 Zeichen eingeben.');await call('addUser',{token,name,password});$('newDriver').value='';$('newPassword').value='';await refresh()});
 function button(label,handler){const b=document.createElement('button');b.textContent=label;b.onclick=()=>run(handler);return b}
-function renderUsers(){const box=$('driverList');box.replaceChildren();users.filter(u=>u.role==='driver').forEach(u=>{const row=document.createElement('div');row.className='savedItem';const span=document.createElement('span');span.textContent=u.name+(u.active?' · aktiv':' · gesperrt');row.append(span,button(u.active?'Sperren':'Aktivieren',async()=>{if(!confirm('Benutzerstatus ändern?'))return;await call('setUserActive',{token,id:u.id,active:!u.active});await refresh()}),button('Passwort ändern',async()=>{const p=prompt('Neues Passwort (mind. 12 Zeichen):');if(p===null)return;await call('resetPassword',{token,id:u.id,password:p});note('Passwort geändert.')}));box.append(row)})}
+function renderUsers(){
+ const box=$('driverList');box.replaceChildren();
+ users.filter(u=>u.role==='driver').forEach(u=>{
+  const row=document.createElement('div');row.className='savedItem';
+  const span=document.createElement('span');span.textContent=u.name+(u.active?' · aktiv':' · gesperrt');
+  row.append(span,
+   button(u.active?'Sperren':'Aktivieren',async()=>{if(!confirm('Benutzerstatus ändern?'))return;await call('setUserActive',{token,id:u.id,active:!u.active});await refresh()}),
+   button('Passwort ändern',async()=>{const p=prompt('Neues Passwort (mind. 12 Zeichen):');if(p===null)return;await call('resetPassword',{token,id:u.id,password:p});note('Passwort geändert.')}),
+   button('🗑️ Fahrer löschen',async()=>{
+    const name=prompt('Fahrer endgültig löschen? Zur Bestätigung den vollständigen Fahrernamen eingeben: '+u.name);
+    if(name===null)return;
+    if(name!==u.name)throw Error('Fahrername stimmt nicht überein.');
+    if(!confirm('Fahrerkonto „'+u.name+'“ endgültig löschen? Dies kann nicht rückgängig gemacht werden. Fahrer mit Einsatzhistorie können aus Dokumentationsgründen nur gesperrt werden.'))return;
+    await call('deleteUser',{token,id:u.id,confirmName:name});
+    await refresh();note('Fahrerkonto „'+u.name+'“ gelöscht.');
+   })
+  );box.append(row);
+ });
+}
 function firstPoint(segment){const p=segment?.points?.[0];if(!p)return null;const lat=Number(p.lat),lng=Number(p.lng);return Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180?{lat,lng}:null}
 function navigateTo(segment){const p=firstPoint(segment);if(!p)throw Error('Für diesen Abschnitt ist noch kein gültiger GPS-Startpunkt vorhanden.');const url='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(p.lat+','+p.lng)+'&travelmode=driving';const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.click();note('Navigation zum ersten GPS-Punkt geöffnet. Lkw-Beschränkungen beachten.');}
 function editSegment(job,segment){
