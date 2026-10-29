@@ -1,0 +1,25 @@
+AGB FAHRER-ASSISTENT V2.1 – GETRENNTE ÖLSPURABSCHNITTE
+
+AKTUALISIERUNG AUF GITHUB
+1. Repository github.com/agb-fahrer/agb-fahrer-assistent öffnen.
+2. Add file > Upload files wählen.
+3. index.html, style.css, app.js, manifest.json und AGB_Logo.png hochladen.
+4. Bestehende Dateien überschreiben lassen; Commit changes bestätigen.
+5. Einige Minuten warten und https://agb-fahrer.github.io/agb-fahrer-assistent/ neu laden.
+6. Auf iPhone bei alter Ansicht Safari aktualisieren, ggf. Home-Bildschirm-App schließen und neu öffnen.
+
+BEDIENUNG
+- GPS-Punkte manuell setzen, auf die Karte tippen oder GPS-Aufzeichnung starten.
+- Für getrennte Ölspuren: „Nächste Ölspur“ wählen. Die Verbindung zwischen Abschnitten wird NICHT gezählt.
+- Reinigungsgänge und Breite sind je Abschnitt separat einstellbar.
+- „Abschnitt abschließen“ beendet einen Abschnitt ohne sofort einen weiteren anzulegen.
+- „Einsatz speichern“ speichert lokal auf diesem Gerät.
+- PDF über Drucken / Als PDF sichern; CSV und GeoJSON enthalten Abschnittskennungen.
+- Bereits in V2 gespeicherte Messungen werden einmalig lokal in V2.1 übernommen, soweit der Browser denselben Speicher verwendet.
+
+ACHTUNG
+- Keine Bedienung durch den Fahrer während der Fahrt.
+- GPS und Luftlinien zwischen Messpunkten sind nur Näherungswerte.
+- GPS-Aufzeichnung nur bei geöffneter App zuverlässig; kein Hintergrundtracking.
+- Karten benötigen Internet; gespeicherte Messungen bleiben lokal und können bei Löschung der Browserdaten verloren gehen.
+- GitHub Pages ist öffentlich: keine vertraulichen Daten im Repository veröffentlichen.
