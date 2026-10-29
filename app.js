@@ -25,7 +25,52 @@ function stop(){if(watch!==null){navigator.geolocation.clearWatch(watch);watch=n
 function start(){if(current().finished){msg('Abschnitt abgeschlossen. Neuen Abschnitt starten.');return}if(!navigator.geolocation){msg('GPS nicht verfügbar.');return}if(watch!==null)return;watch=navigator.geolocation.watchPosition(p=>{const fix={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};lastFix=fix;if(fix.accuracy>40){msg('GPS zu ungenau (±'+Math.round(fix.accuracy)+' m), Punkt übersprungen.');return}const prev=current().points.at(-1);if(prev&&meters(prev,fix)<5)return;if(prev&&meters(prev,fix)>150){msg('GPS-Sprung >150 m erkannt; Punkt übersprungen.');return}add(fix,'GPS-Aufzeichnung')},geoError,{enableHighAccuracy:true,maximumAge:0,timeout:20000});render();msg('GPS-Aufzeichnung läuft. App geöffnet lassen.')}
 function storage(){try{return JSON.parse(localStorage.getItem(key)||'[]')}catch{return []}}
 function persist(list){try{localStorage.setItem(key,JSON.stringify(list));return true}catch{msg('Speichern fehlgeschlagen. Gerätespeicher prüfen.');return false}}
-function renderSaved(){const box=$('saved');box.replaceChildren();const list=storage();if(!list.length){box.textContent='Noch keine Messungen gespeichert.';return}list.forEach((item,i)=>{const row=document.createElement('div');row.className='savedItem';const span=document.createElement('span');const sum=item.segments.reduce((n,s)=>n+segLength(s),0);span.textContent=(item.title||'Messung')+' · '+new Date(item.created).toLocaleString('de-DE')+' · '+fmt(sum)+' m · '+item.segments.length+' Abschnitte';const open=document.createElement('button');open.textContent='Laden';open.onclick=()=>{try{if(segments.some(s=>s.points?.length)&&!confirm('Aktuelle Messung durch die gespeicherte Messung ersetzen? Ungespeicherte Änderungen gehen verloren.')){msg('Laden abgebrochen.');return}if(!Array.isArray(item.segments)||!item.segments.length)throw Error('Die gespeicherte Messung enthält keine Abschnitte.');const loaded=JSON.parse(JSON.stringify(item.segments));if(!loaded.every(s=>Array.isArray(s.points)))throw Error('Gespeicherte Messpunkte sind ungültig.');stop();window.dispatchEvent(new CustomEvent('agb:new-measurement'));segments=loaded;active=Math.max(0,Math.min(Number(item.active??loaded.length-1)||0,loaded.length-1));$('title').value=item.title||'';render();fitAll();msg('Gespeicherte Messung geladen: '+(item.title||'Messung')+' ('+loaded.length+' Abschnitt/e).');document.getElementById('map')?.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){msg('Laden fehlgeschlagen: '+e.message);console.error('AGB: lokale Messung laden',e)}};const del=document.createElement('button');del.textContent='Löschen';del.onclick=()=>{if(confirm('Diese Messung unwiderruflich löschen?')){list.splice(i,1);persist(list);renderSaved()}};row.append(span,open,del);box.append(row)})}
+function renderSaved(){
+ const box=$('saved');box.replaceChildren();const list=storage();
+ if(!list.length){box.textContent='Noch keine Messungen gespeichert.';return}
+ list.forEach((item,i)=>{
+  const row=document.createElement('div');row.className='savedItem';
+  const span=document.createElement('span');
+  const sum=(item.segments||[]).reduce((n,s)=>n+segLength(s),0);
+  span.textContent=(item.title||'Messung')+' · '+new Date(item.created).toLocaleString('de-DE')+' · '+fmt(sum)+' m · '+(item.segments||[]).length+' Abschnitte';
+  const open=document.createElement('button');open.type='button';open.textContent='Laden';
+  const del=document.createElement('button');del.type='button';del.textContent='Löschen';
+  const feedback=document.createElement('div');feedback.style.cssText='width:100%;font-size:14px;margin-top:6px';
+  let mode='';
+  function clearChoice(){mode='';feedback.replaceChildren();open.textContent='Laden';del.textContent='Löschen';}
+  open.addEventListener('click',()=>{
+   if(mode!=='load'&&segments.some(s=>s.points?.length)){
+    clearChoice();mode='load';open.textContent='Laden bestätigen';
+    feedback.textContent='Achtung: Die aktuell geöffnete Messung wird ersetzt. Erneut auf „Laden bestätigen“ klicken.';return;
+   }
+   try{
+    if(!Array.isArray(item.segments)||!item.segments.length)throw Error('Keine gültigen Abschnitte gespeichert.');
+    const loaded=JSON.parse(JSON.stringify(item.segments));
+    if(!loaded.every(s=>Array.isArray(s.points)))throw Error('Gespeicherte Messpunkte sind ungültig.');
+    stop();window.dispatchEvent(new CustomEvent('agb:new-measurement'));
+    segments=loaded;active=Math.max(0,Math.min(Number(item.active??loaded.length-1)||0,loaded.length-1));
+    $('title').value=item.title||'';render();fitAll();
+    msg('Gespeicherte Messung geladen: '+(item.title||'Messung'));
+    document.getElementById('map')?.scrollIntoView({behavior:'smooth',block:'center'});
+    clearChoice();
+   }catch(e){feedback.textContent='Laden fehlgeschlagen: '+e.message;msg('Laden fehlgeschlagen: '+e.message);console.error(e)}
+  });
+  del.addEventListener('click',()=>{
+   if(mode!=='delete'){
+    clearChoice();mode='delete';del.textContent='Löschen bestätigen';
+    feedback.textContent='Achtung: Diese lokale Messung wird endgültig gelöscht. Erneut auf „Löschen bestätigen“ klicken.';return;
+   }
+   try{
+    const latest=storage();const idx=latest.findIndex(x=>x.id===item.id&&x.created===item.created);
+    if(idx<0)throw Error('Messung wurde zwischenzeitlich verändert. Bitte neu laden.');
+    latest.splice(idx,1);
+    if(!persist(latest))throw Error('Speichern im Browser fehlgeschlagen.');
+    renderSaved();msg('Lokale Messung gelöscht.');
+   }catch(e){feedback.textContent='Löschen fehlgeschlagen: '+e.message;msg('Löschen fehlgeschlagen: '+e.message);console.error(e)}
+  });
+  row.append(span,open,del,feedback);box.append(row);
+ });
+}
 function fitAll(){if(!map)return;const pts=segments.flatMap(s=>s.points);if(pts.length===1)map.setView([pts[0].lat,pts[0].lng],17);else if(pts.length>1)map.fitBounds(L.latLngBounds(pts.map(p=>[p.lat,p.lng])).pad(.15))}
 function download(filename,data,type){const blob=new Blob([data],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),15000)}
 function migrate(){if(localStorage.getItem('agb_v21_migrated'))return;try{const old=JSON.parse(localStorage.getItem(oldKey)||'[]');if(old.length){const existing=storage();old.forEach(o=>{existing.push({id:o.id||String(Date.now()),created:o.created||new Date().toISOString(),title:o.title||'',active:0,segments:[{id:'alt',points:o.points||[],passes:o.passes||1,width:o.width||2.5,finished:true}]})});if(!persist(existing))return}localStorage.setItem('agb_v21_migrated','1')}catch{}}
