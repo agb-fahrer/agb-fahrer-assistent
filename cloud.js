@@ -5,7 +5,7 @@ function setupFrame(){const url=localStorage.getItem('agb_v3_backend');if(!url){
 window.addEventListener('message',event=>{if(!frame||!(event.origin===ORIGIN||/^https:\/\/[a-z0-9.-]+\.googleusercontent\.com$/.test(event.origin)))return;const d=event.data||{};if(d.kind==='agb-ready'){if(ready||!event.source)return;bridgeWindow=event.source;bridgeOrigin=event.origin;ready=true;note('Datenverbindung bereit.');if(token)call('me',{token}).then(x=>{user=x.user;(user.mustChangePassword?showPasswordPanel():showSession());if(!user.mustChangePassword)refresh()}).catch(()=>{token='';sessionStorage.removeItem('agb_v3_token');note('Bitte anmelden.')});return}if(d.kind==='agb-response'){if(event.source!==bridgeWindow||event.origin!==bridgeOrigin)return;const p=pending.get(d.id);if(!p)return;pending.delete(d.id);clearTimeout(p.timer);d.result?.ok?p.resolve(d.result.data):p.reject(Error(d.result?.error||'Unbekannter Serverfehler'))}});
 function call(op,args={}){return new Promise((resolve,reject)=>{if(!ready||!bridgeWindow)return reject(Error('Keine Verbindung zum Google-Script.'));const id=++sequence,timer=setTimeout(()=>{pending.delete(id);reject(Error('Zeitüberschreitung.'))},45000);pending.set(id,{resolve,reject,timer});bridgeWindow.postMessage({kind:'agb-request',id,op,args},bridgeOrigin)})}
 async function run(fn){try{await fn()}catch(e){note('Fehler: '+e.message)}}
-function showSession(){$('passwordPanel').hidden=false;$('passwordPanel').hidden=true;$('loginPanel').hidden=true;$('sessionPanel').hidden=false;$('sessionLabel').textContent='Angemeldet: '+user.name+' ('+(user.role==='admin'?'Administrator':'Fahrer')+')';$('adminTools').hidden=user.role!=='admin'}
+function showSession(){$('passwordPanel').hidden=false;$('passwordPanel').hidden=true;$('loginPanel').hidden=true;$('sessionPanel').hidden=false;$('sessionLabel').textContent='Angemeldet: '+user.name+' ('+(user.role==='admin'?'Administrator':'Fahrer')+')';$('adminTools').hidden=user.role!=='admin';$('tabArchive').hidden=user.role!=='admin';if(user.role!=='admin')jobView='active';setJobTab()}
 function showPasswordPanel(){ $('loginPanel').hidden=true;$('sessionPanel').hidden=true;$('passwordPanel').hidden=false;note(user?.mustChangePassword?'Startpasswort muss geändert werden.':'Eigenes Passwort ändern.'); }
 function logout(){token='';user=null;sessionStorage.removeItem('agb_v3_token');$('sessionPanel').hidden=true;$('passwordPanel').hidden=true;$('loginPanel').hidden=false;note('Abgemeldet.');}
 $('changeOwnPassword').onclick=showPasswordPanel;
@@ -30,6 +30,49 @@ function editSegment(job,segment){
 }
 $('syncSegment').onclick=()=>run(async()=>{if(!editing)throw Error('Kein zentraler Abschnitt geladen.');const s=window.AGBMeasure.getActive().segment;if(s.points.length<2)throw Error('Mindestens zwei Messpunkte erforderlich.');if(!confirm('Diesen Abschnitt zentral aktualisieren?'))return;await call('updateSegment',{token,jobId:editing.jobId,segmentId:editing.segmentId,revision:editing.revision,segment:s});editing=null;$('syncPanel').hidden=true;await refresh();note('Abschnitt erfolgreich zentral synchronisiert.');});
 $('syncCancel').onclick=()=>{if(!confirm('Zentrale Bearbeitung verlassen? Nicht übertragene Änderungen bleiben nur in der Messansicht.'))return;editing=null;$('syncPanel').hidden=true;note('Zentrale Bearbeitung beendet.')};
-function renderJobs(){const box=$('cloudJobs');box.replaceChildren();if(!jobs.length){box.textContent='Noch keine zentralen Einsätze.';return}jobs.forEach(j=>{const card=document.createElement('div');card.className='segmentItem';card.style.display='block';const head=document.createElement('strong');head.textContent=j.title+' · '+new Date(j.createdAt).toLocaleString('de-DE');card.append(head,document.createElement('br'),button('Auf Karte öffnen',async()=>{window.AGBMeasure.load(j);note('Einsatz auf Karte geöffnet.')}));j.segments.forEach((s,i)=>{const row=document.createElement('div');row.className='savedItem';const label=document.createElement('span');const a=j.assignments.find(a=>a.segmentId===s.id);const driver=users.find(u=>u.id===a?.driverId);label.textContent='Abschnitt '+(i+1)+' · '+(driver?.name|| (a?'Zugewiesen':'Nicht zugewiesen'))+' · '+(a?.status||'offen');row.append(label);if(user.role==='admin'||a?.driverId===user.id){row.append(button('✏️ Abschnitt vermessen',async()=>editSegment(j,s)))}if(firstPoint(s)&&(user.role==='admin'||a?.driverId===user.id)){row.append(button('📍 Navigation zum Startpunkt',async()=>navigateTo(s)))}if(user.role==='admin'){const select=document.createElement('select');const opt=document.createElement('option');opt.value='';opt.textContent='Fahrer zuweisen';select.append(opt);users.filter(u=>u.role==='driver'&&u.active).forEach(u=>{const o=document.createElement('option');o.value=u.id;o.textContent=u.name;if(a?.driverId===u.id)o.selected=true;select.append(o)});select.onchange=()=>run(async()=>{if(!select.value)return;await call('assign',{token,jobId:j.id,segmentId:s.id,driverId:select.value});await refresh()});row.append(select)}if(a&&(user.role==='admin'||a.driverId===user.id)){const sel=document.createElement('select');['offen','in Bearbeitung','abgeschlossen'].forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;o.selected=a.status===v;sel.append(o)});sel.onchange=()=>run(async()=>{await call('status',{token,assignmentId:a.id,status:sel.value});await refresh()});row.append(sel)}card.append(row)});box.append(card)})}
+function setJobTab(){ $('tabActive').classList.toggle('selected',jobView==='active');$('tabArchive').classList.toggle('selected',jobView==='archive');}
+$('tabActive').onclick=()=>{jobView='active';setJobTab();renderJobs()};
+$('tabArchive').onclick=()=>{if(user?.role!=='admin')return;jobView='archive';setJobTab();renderJobs()};
+function safeDate(x){const d=new Date(x);return Number.isNaN(d.getTime())?'':d.toLocaleString('de-DE')}
+function jobStatus(j){return j.status==='archiviert'?'Archiviert':j.assignments?.some(a=>a.status==='in Bearbeitung')?'In Bearbeitung':'Offen'}
+function renderJobs(){
+ const box=$('cloudJobs');box.replaceChildren();
+ const active=jobs.filter(j=>j.status!=='archiviert'),archived=jobs.filter(j=>j.status==='archiviert');
+ $('jobStats').textContent=active.length+' aktiv · '+(user?.role==='admin'?archived.length+' archiviert':'Meine Einsätze');
+ const list=(jobView==='archive'&&user?.role==='admin'?archived:active);
+ if(!list.length){const empty=document.createElement('p');empty.className='empty-state';empty.textContent=jobView==='archive'?'Das Archiv ist leer.':'Keine aktiven Einsätze vorhanden.';box.append(empty);return}
+ list.forEach(j=>{
+  const isArchived=j.status==='archiviert';
+  const card=document.createElement('article');card.className='job-card'+(isArchived?' archived':'');
+  const header=document.createElement('div');header.className='job-card-header';
+  const title=document.createElement('div');const h=document.createElement('h4');h.textContent=j.title;const date=document.createElement('small');date.textContent='Erstellt: '+safeDate(j.createdAt);title.append(h,date);
+  const badge=document.createElement('span');badge.className='status-badge '+(isArchived?'badge-archived':'badge-active');badge.textContent=jobStatus(j);header.append(title,badge);card.append(header);
+  const controls=document.createElement('div');controls.className='job-actions';
+  controls.append(button('🗺️ Auf Karte',async()=>{window.AGBMeasure.load(j);document.getElementById('measurePanel').scrollIntoView({behavior:'smooth'});note('Einsatz auf Karte geöffnet.')}));
+  if(user.role==='admin'){
+   if(isArchived){controls.append(button('↩ Wieder öffnen',async()=>{if(!confirm('Einsatz wieder aktivieren?'))return;await call('reopenJob',{token,jobId:j.id});await refresh()}));controls.append(button('🗑️ Löschen',async()=>{const typed=prompt('Einsatz endgültig löschen? Alle GPS-Punkte und Zuweisungen gehen verloren. Zur Bestätigung exakt den Einsatznamen eingeben: '+j.title);if(typed===null)return;if(typed!==j.title)throw Error('Einsatzname stimmt nicht überein.');if(!confirm('Wirklich endgültig löschen? Dieser Schritt kann nicht rückgängig gemacht werden.'))return;await call('deleteJob',{token,jobId:j.id,confirmTitle:typed});await refresh()}));}
+   else controls.append(button('📁 Abschließen',async()=>{if(!confirm('Gesamten Einsatz archivieren? Fahrer können ihn danach nicht mehr bearbeiten.'))return;await call('archiveJob',{token,jobId:j.id});await refresh()}));
+  }
+  card.append(controls);
+  const details=document.createElement('details');details.className='job-details';const summary=document.createElement('summary');summary.textContent='Abschnitte anzeigen ('+j.segments.length+')';details.append(summary);
+  j.segments.forEach((segment,i)=>{
+   const row=document.createElement('div');row.className='job-segment';const a=j.assignments.find(x=>x.segmentId===segment.id),driver=users.find(x=>x.id===a?.driverId);
+   const info=document.createElement('div');info.className='segment-info';const label=document.createElement('strong');label.textContent='Abschnitt '+(i+1);const meta=document.createElement('span');meta.textContent=(driver?.name||(a?'Zugewiesen':'Nicht zugewiesen'))+' · '+(a?.status||'offen');info.append(label,meta);row.append(info);
+   const actions=document.createElement('div');actions.className='segment-actions';
+   if(!isArchived&&(user.role==='admin'||a?.driverId===user.id))actions.append(button('✏️ Vermessen',async()=>editSegment(j,segment)));
+   if(firstPoint(segment)&&(user.role==='admin'||a?.driverId===user.id))actions.append(button('📍 Navigation',async()=>navigateTo(segment)));
+   if(!isArchived&&user.role==='admin'){
+    const select=document.createElement('select');select.setAttribute('aria-label','Fahrer für Abschnitt '+(i+1)+' zuweisen');const opt=document.createElement('option');opt.value='';opt.textContent='Fahrer zuweisen';select.append(opt);
+    users.filter(x=>x.role==='driver'&&x.active).forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.name;if(a?.driverId===x.id)o.selected=true;select.append(o)});
+    select.onchange=()=>run(async()=>{if(!select.value)return;await call('assign',{token,jobId:j.id,segmentId:segment.id,driverId:select.value});await refresh()});actions.append(select);
+   }
+   if(!isArchived&&a&&(user.role==='admin'||a.driverId===user.id)){
+    const sel=document.createElement('select');sel.setAttribute('aria-label','Bearbeitungsstatus Abschnitt '+(i+1));['offen','in Bearbeitung','abgeschlossen'].forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;o.selected=a.status===v;sel.append(o)});
+    sel.onchange=()=>run(async()=>{await call('status',{token,assignmentId:a.id,status:sel.value});await refresh()});actions.append(sel);
+   }
+   row.append(actions);details.append(row);
+  });card.append(details);box.append(card);
+ });
+}
 $('backendUrl').value=localStorage.getItem('agb_v3_backend')||'';setupFrame();
 })();
