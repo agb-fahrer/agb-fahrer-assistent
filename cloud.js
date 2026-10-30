@@ -10,7 +10,7 @@ function showPasswordPanel(){ $('loginPanel').hidden=true;$('sessionPanel').hidd
 function logout(){jobView='active';editing=null;$('syncPanel').hidden=true;token='';user=null;sessionStorage.removeItem('agb_v3_token');$('sessionPanel').hidden=true;$('passwordPanel').hidden=true;$('loginPanel').hidden=false;note('Abgemeldet.');}
 $('changeOwnPassword').onclick=showPasswordPanel;
 $('cancelPassword').onclick=logout;
-$('saveOwnPassword').onclick=()=>run(async()=>{const oldPassword=$('oldPassword').value,newPassword=$('newOwnPassword').value,confirm=$('confirmOwnPassword').value;if(newPassword.length<12)throw Error('Mindestens 12 Zeichen erforderlich.');if(newPassword!==confirm)throw Error('Neue Passwörter stimmen nicht überein.');await call('changePassword',{token,oldPassword,newPassword});$('oldPassword').value='';$('newOwnPassword').value='';$('confirmOwnPassword').value='';logout();note('Passwort geändert. Bitte mit dem neuen Passwort anmelden.');});
+$('saveOwnPassword').onclick=()=>run(async()=>{const oldPassword=$('oldPassword').value,newPassword=$('newOwnPassword').value,confirm=$('confirmOwnPassword').value;if(!/^[0-9]{4,12}$/.test(newPassword))throw Error('Bitte 4 bis 12 Ziffern eingeben.');if(newPassword!==confirm)throw Error('Neue Passwörter stimmen nicht überein.');await call('changePassword',{token,oldPassword,newPassword});$('oldPassword').value='';$('newOwnPassword').value='';$('confirmOwnPassword').value='';logout();note('Passwort geändert. Bitte mit dem neuen Passwort anmelden.');});
 $('connectBackend').onclick=()=>{const url=$('backendUrl').value.trim();localStorage.setItem('agb_v3_backend',url);for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('Verbindung wurde neu eingerichtet.'))}pending.clear();frame?.remove();frame=null;bridgeWindow=null;bridgeOrigin=ORIGIN;ready=false;setupFrame()};
 $('loginBtn').onclick=()=>run(async()=>{const x=await call('login',{name:$('loginName').value,password:$('loginPassword').value});token=x.token;user=x.user;sessionStorage.setItem('agb_v3_token',token);$('loginPassword').value='';if(user.mustChangePassword){showPasswordPanel();return;}showSession();note('Angemeldet.');await refresh()});
 $('logoutBtn').onclick=logout;
@@ -57,7 +57,7 @@ sendButton.addEventListener('click',async()=>{
   try{await refresh()}catch(e){sendFeedback.textContent+='\nDer Einsatz wurde angelegt, aber die Liste konnte nicht aktualisiert werden: '+e.message;}
  }catch(e){sendBusy=false;resetSendButton();sendFeedback.textContent='Zentrales Speichern nicht möglich: '+e.message;note('Fehler: '+e.message);console.error('AGB Zentrales Speichern',e);}
 });
-$('addDriver').onclick=()=>run(async()=>{const name=$('newDriver').value.trim(),password=$('newPassword').value;if(!name||password.length<12)throw Error('Name und Passwort mit mindestens 12 Zeichen eingeben.');await call('addUser',{token,name,password,role:$('newRole').value});$('newDriver').value='';$('newPassword').value='';await refresh()});
+$('addDriver').onclick=()=>run(async()=>{const name=$('newDriver').value.trim(),password=$('newPassword').value;if(!name||!/^[0-9]{4,12}$/.test(password))throw Error('Name und Passwort mit 4 bis 12 Ziffern eingeben.');await call('addUser',{token,name,password,role:$('newRole').value});$('newDriver').value='';$('newPassword').value='';await refresh()});
 function button(label,handler){const b=document.createElement('button');b.textContent=label;b.onclick=()=>run(handler);return b}
 function renderUsers(){
  const box=$('driverList');box.replaceChildren();
@@ -66,14 +66,14 @@ function renderUsers(){
   const span=document.createElement('span');span.textContent=u.name+' · '+(u.role==='leader'?'Einsatzleiter':'Fahrer')+(u.active?' · aktiv':' · gesperrt');
   row.append(span,button(u.role==='driver'?'Zum Einsatzleiter':'Zum Fahrer',async()=>{if(!confirm('Rolle ändern? Der Benutzer muss sich danach neu anmelden.'))return;await call('setRole',{token,id:u.id,role:u.role==='driver'?'leader':'driver'});await refresh()}),
    button(u.active?'Sperren':'Aktivieren',async()=>{if(!confirm('Benutzerstatus ändern?'))return;await call('setUserActive',{token,id:u.id,active:!u.active});await refresh()}),
-   button('Passwort ändern',async()=>{const p=prompt('Neues Passwort (mind. 12 Zeichen):');if(p===null)return;await call('resetPassword',{token,id:u.id,password:p});note('Passwort geändert.')}),
+   button('Passwort ändern',async()=>{const p=prompt('Neues Passwort (4 bis 12 Ziffern):');if(p===null)return;await call('resetPassword',{token,id:u.id,password:p});note('Passwort geändert.')}),
    button('🗑️ Fahrer löschen',async()=>{
     const name=prompt('Fahrer endgültig löschen? Zur Bestätigung den vollständigen Fahrernamen eingeben: '+u.name);
     if(name===null)return;
     if(name!==u.name)throw Error('Fahrername stimmt nicht überein.');
-    if(!confirm('Fahrerkonto „'+u.name+'“ endgültig löschen? Dies kann nicht rückgängig gemacht werden. Fahrer mit Einsatzhistorie können aus Dokumentationsgründen nur gesperrt werden.'))return;
+    if(!confirm('Fahrerkonto „'+u.name+'“ endgültig löschen? Dies kann nicht rückgängig gemacht werden. Bei vorhandener Einsatzhistorie wird das Konto entfernt und die technische Zuordnung für alte Berichte erhalten.'))return;
     await call('deleteUser',{token,id:u.id,confirmName:name});
-    await refresh();note('Fahrerkonto „'+u.name+'“ gelöscht.');
+    await refresh();note('Fahrerkonto „'+u.name+'“ entfernt; historische Zuordnungen bleiben erhalten.');
    })
   );box.append(row);
  });
@@ -110,7 +110,7 @@ function renderJobs(){
   controls.append(button('🗺️ Auf Karte',async()=>{window.AGBMeasure.load(j);document.getElementById('measurePanel').scrollIntoView({behavior:'smooth'});note('Einsatz auf Karte geöffnet.')}));
   if(['admin','leader'].includes(user.role)){
    if(j.status==='entwurf')controls.append(button('🟢 Für Fahrer freigeben',async()=>{if(!confirm('Großeinsatz jetzt für zugewiesene Fahrer freigeben?'))return;await call('releaseJob',{token,jobId:j.id});await refresh()}));
-   if(isArchived){controls.append(button('↩ Wieder öffnen',async()=>{if(!confirm('Einsatz wieder aktivieren?'))return;await call('reopenJob',{token,jobId:j.id});await refresh()}));controls.append(button('🗑️ Löschen',async()=>{const typed=prompt('Einsatz endgültig löschen? Alle GPS-Punkte und Zuweisungen gehen verloren. Zur Bestätigung exakt den Einsatznamen eingeben: '+j.title);if(typed===null)return;if(typed!==j.title)throw Error('Einsatzname stimmt nicht überein.');if(!confirm('Wirklich endgültig löschen? Dieser Schritt kann nicht rückgängig gemacht werden.'))return;await call('deleteJob',{token,jobId:j.id,confirmTitle:typed});await refresh()}));}
+   if(isArchived){controls.append(button('↩ Wieder öffnen',async()=>{if(!confirm('Einsatz wieder aktivieren?'))return;note('Öffne Einsatz „'+j.title+'“ …');await call('reopenJob',{token,jobId:j.id});jobView='active';setJobTab();await refresh();note('Einsatz „'+j.title+'“ wieder geöffnet.')}));controls.append(button('🗑️ Löschen',async()=>{const typed=prompt('Einsatz endgültig löschen? Alle GPS-Punkte und Zuweisungen gehen verloren. Zur Bestätigung exakt den Einsatznamen eingeben: '+j.title);if(typed===null)return;if(typed!==j.title)throw Error('Einsatzname stimmt nicht überein.');if(!confirm('Wirklich endgültig löschen? Dieser Schritt kann nicht rückgängig gemacht werden.'))return;note('Lösche Einsatz „'+j.title+'“ …');await call('deleteJob',{token,jobId:j.id,confirmTitle:typed});await refresh();note('Einsatz „'+j.title+'“ gelöscht.')}));}
    else if(j.status!=='entwurf') controls.append(button('📁 Abschließen',async()=>{if(!confirm('Gesamten Einsatz archivieren? Fahrer können ihn danach nicht mehr bearbeiten.'))return;await call('archiveJob',{token,jobId:j.id});await refresh()}));
   }
   card.append(controls);
