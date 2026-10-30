@@ -1,0 +1,15 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><title>AGB Datenverbindung</title></head><body><script>
+(function(){
+'use strict';
+const ORIGIN='https://agb-fahrer.github.io';
+const OPS=['login','me','users','addUser','setUserActive','resetPassword','changePassword','jobs','createJob','assign','status','updateSegment','archiveJob','reopenJob','deleteJob','setRole','saveDraft','releaseJob'];
+window.addEventListener('message',function(event){
+ if(event.origin!==ORIGIN||event.source!==window.top)return;
+ const d=event.data;
+ if(!d||typeof d!=='object'||d.kind!=='agb-request'||!Number.isSafeInteger(d.id)||d.id<0||!OPS.includes(d.op)||!d.args||typeof d.args!=='object'||Array.isArray(d.args))return;
+ const reply=function(result){event.source.postMessage({kind:'agb-response',id:d.id,result:result},ORIGIN)};
+ google.script.run.withSuccessHandler(reply).withFailureHandler(function(){reply({ok:false,error:'Anfrage fehlgeschlagen.'})}).api(d.op,d.args);
+});
+if(window.top!==window)window.top.postMessage({kind:'agb-ready'},ORIGIN);
+})();
+</script></body></html>

@@ -1,16 +1,38 @@
-AGB Fahrer-Assistent – direktes Upgrade von V2.1 auf V3.2 (ERPROBUNG)
+AGB Fahrer-Assistent V4.0 – TESTVERSION (30.10.2026)
+==================================================
 
-Diese Dateien ersetzen die bestehenden Dateien im GitHub-Repository.
-Vorher V2.1 als ZIP sichern. Alle 6 Dateien im Stammverzeichnis hochladen; cloud.js ist neu.
-GitHub Pages braucht nach Upload einige Minuten.
+WICHTIG: VORHER SICHERN
+- Bestehende GitHub-Dateien sichern oder einen separaten Test-Branch anlegen.
+- Google-Tabelle und Code.gs/Bridge.html im bestehenden Apps-Script-Projekt sichern.
+- Diese Version NICHT ungeprüft im laufenden Einsatz einsetzen.
 
-Backend: Google Apps Script V3.2. Die Bereitstellung Nur ich funktioniert NICHT fuer andere Fahrer.
-Die Apps-Script-Web-App-URL wird in der App unter Datenverbindung eingetragen.
+INSTALLATION
+1) GitHub Pages: index.html, app.js, cloud.js, style.css, manifest.json und AGB_Logo.png ersetzen.
+2) Apps Script: Im BESTEHENDEN Projekt Code.gs und Bridge.html ersetzen.
+3) Bereitstellen > Bereitstellungen verwalten > vorhandene Web-App bearbeiten > Neue Version.
+4) App neu laden (Strg+Umschalt+R). Bereits hinterlegte Web-App-Adresse bleibt bei aktualisierter Bereitstellung bestehen.
+5) Als Administrator anmelden. In Benutzerverwaltung Rolle Fahrer/Einsatzleiter auswählen.
 
-WICHTIG: Nicht fuer den betrieblichen Produktiveinsatz freigeben, bevor
-- echte Anmeldung und Rechte geprueft sind
-- iframe/postMessage zwischen GitHub Pages und Apps Script funktioniert
-- zentrale GPS-Aenderungen gespeichert werden koennen (derzeit nicht implementiert)
-- der selbst entwickelte Login sicherheitsgeprueft ist
+NEU
+- Dashboard mit Schnellzugriff.
+- Einsatzleiter-Rolle (auch nachträgliche Umstellung durch Admin).
+- Großeinsatz: GPS oder Kartenpunkte, Länge ohne Breite; Entwurf zentral; Freigabe erst nach Fahrerzuweisung.
+- Normale Messung: Nach Abschluss freie Breite (0,01–100 m) eingeben.
+- Zentrale Entwürfe für Einsatzleiter und Admin sichtbar, für Fahrer vor Freigabe nicht sichtbar.
+- Automatischer Entwurfs-Speicherversuch nach erstem fertigen Abschnitt, danach verzögerte Aktualisierung.
+- Bestehende Datenstruktur in Google Sheets bleibt erhalten (Status 'entwurf' als neuer Wert).
 
-Das Laden zentraler Einsaetze in die Karte speichert GPS-Aenderungen NICHT zurueck.
+BEKANNTE GRENZEN DIESER TESTVERSION
+- Automatisches Speichern erfordert eine aktive Verbindung; keine vollständige Offline-Synchronisationswarteschlange.
+- Zuweisung bleibt vorerst auf EINEN Fahrer je Abschnitt begrenzt.
+- Umfangreiche Performance-/Mobilgerätetests mit realem Google Apps Script wurden hier nicht durchgeführt.
+- Änderungen am selben Entwurf von zwei Einsatzleitern gleichzeitig sind noch nicht konfliktfrei zusammengeführt.
+- Bestehende V3-Messungen bleiben im bisherigen lokalen Browserspeicher, wenn dieselbe Domain/Browser verwendet wird.
+- Die Freigabe verlangt mindestens eine Fahrerzuweisung; andere Abschnitte können noch unzugewiesen sein.
+
+TESTABLAUF
+1) Admin anmelden; Einsatzleiter anlegen; als Einsatzleiter neu anmelden.
+2) Großeinsatz anlegen; Titel eintragen; zwei Kartenpunkte setzen; Abschnitt abschließen.
+3) Prüfen, ob Entwurf zentral erscheint. Fahrer darf ihn nicht sehen.
+4) Fahrer zuweisen; Entwurf freigeben; als Fahrer anmelden und Breite eintragen.
+5) Bestehende Einsätze und lokale Messungen kontrollieren.
