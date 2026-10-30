@@ -117,7 +117,7 @@ function renderJobs(){
   const details=document.createElement('details');details.className='job-details';const summary=document.createElement('summary');summary.textContent='Abschnitte anzeigen ('+j.segments.length+')';details.append(summary);
   j.segments.forEach((segment,i)=>{
    const row=document.createElement('div');row.className='job-segment';const a=j.assignments.find(x=>x.segmentId===segment.id),driver=users.find(x=>x.id===a?.driverId);
-   const info=document.createElement('div');info.className='segment-info';const label=document.createElement('strong');label.textContent='Abschnitt '+(i+1);const meta=document.createElement('span');meta.textContent=(driver?.name||(a?'Zugewiesen':'Nicht zugewiesen'))+' · '+(a?.status||'offen');info.append(label,meta);row.append(info);
+   const info=document.createElement('div');info.className='segment-info';const label=document.createElement('strong');label.textContent=segment.name?.trim()||'Abschnitt '+(i+1);const meta=document.createElement('span');meta.textContent=(driver?.name||(a?'Zugewiesen':'Nicht zugewiesen'))+' · '+(a?.status||'offen');info.append(label,meta);row.append(info);
    const actions=document.createElement('div');actions.className='segment-actions';
    if(!isArchived&&(['admin','leader'].includes(user.role)||a?.driverId===user.id))actions.append(button('✏️ Vermessen',async()=>editSegment(j,segment)));
    if(firstPoint(segment)&&(['admin','leader'].includes(user.role)||a?.driverId===user.id))actions.append(button('📍 Navigation',async()=>navigateTo(segment)));
