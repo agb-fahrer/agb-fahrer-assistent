@@ -59,6 +59,33 @@ sendButton.addEventListener('click',async()=>{
 });
 $('addDriver').onclick=()=>run(async()=>{const name=$('newDriver').value.trim(),password=$('newPassword').value;if(!name||!/^[0-9]{4,12}$/.test(password))throw Error('Name und Passwort mit 4 bis 12 Ziffern eingeben.');await call('addUser',{token,name,password,role:$('newRole').value});$('newDriver').value='';$('newPassword').value='';await refresh()});
 function button(label,handler){const b=document.createElement('button');b.textContent=label;b.onclick=()=>run(handler);return b}
+
+// Eigenes, barrierearmes Bestätigungsfenster – ohne Browser-prompt/confirm.
+function bestaetigen(titel, beschreibung, aktion='OK'){
+ return new Promise(resolve=>{
+  const backdrop=document.createElement('div');
+  backdrop.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px';
+  const box=document.createElement('div');
+  box.setAttribute('role','alertdialog');box.setAttribute('aria-modal','true');
+  box.style.cssText='background:#fff;color:#17212b;border-radius:14px;padding:24px;max-width:430px;width:100%;box-shadow:0 12px 45px #0006';
+  const heading=document.createElement('h3');heading.textContent=titel;heading.style.marginTop='0';
+  const info=document.createElement('p');info.textContent=beschreibung;
+  const actions=document.createElement('div');actions.style.cssText='display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap;margin-top:24px';
+  const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Abbrechen';
+  cancel.style.cssText='background:#e5e7eb;color:#111827;padding:12px 18px;border-radius:8px;border:0;cursor:pointer';
+  const ok=document.createElement('button');ok.type='button';ok.textContent=aktion;
+  ok.style.cssText='background:#b91c1c;color:white;padding:12px 18px;border-radius:8px;border:0;cursor:pointer';
+  actions.append(cancel,ok);box.append(heading,info,actions);backdrop.append(box);document.body.append(backdrop);
+  const previous=document.activeElement;
+  function finish(value){document.removeEventListener('keydown',onKey,true);backdrop.remove();previous?.focus?.();resolve(value)}
+  function onKey(e){if(e.key==='Escape'){e.preventDefault();finish(false)}else if(e.key==='Tab'){const next=e.shiftKey?ok:cancel;if(document.activeElement===(e.shiftKey?cancel:ok)){e.preventDefault();next.focus()}}}
+  document.addEventListener('keydown',onKey,true);
+  cancel.onclick=()=>finish(false);ok.onclick=()=>finish(true);
+  backdrop.addEventListener('click',e=>{if(e.target===backdrop)finish(false)});
+  cancel.focus();
+ });
+}
+
 function renderUsers(){
  const box=$('driverList');box.replaceChildren();
  users.filter(u=>u.role==='driver'||u.role==='leader').forEach(u=>{
@@ -68,11 +95,8 @@ function renderUsers(){
    button(u.active?'Sperren':'Aktivieren',async()=>{if(!confirm('Benutzerstatus ändern?'))return;await call('setUserActive',{token,id:u.id,active:!u.active});await refresh()}),
    button('Passwort ändern',async()=>{const p=prompt('Neues Passwort (4 bis 12 Ziffern):');if(p===null)return;await call('resetPassword',{token,id:u.id,password:p});note('Passwort geändert.')}),
    button('🗑️ Fahrer löschen',async()=>{
-    const name=prompt('Fahrer endgültig löschen? Zur Bestätigung den vollständigen Fahrernamen eingeben: '+u.name);
-    if(name===null)return;
-    if(name!==u.name)throw Error('Fahrername stimmt nicht überein.');
-    if(!confirm('Fahrerkonto „'+u.name+'“ endgültig löschen? Dies kann nicht rückgängig gemacht werden. Bei vorhandener Einsatzhistorie wird das Konto entfernt und die technische Zuordnung für alte Berichte erhalten.'))return;
-    await call('deleteUser',{token,id:u.id,confirmName:name});
+    if(!await bestaetigen('Fahrer löschen?', 'Möchtest du „'+u.name+'“ wirklich löschen? Dieser Vorgang kann nicht rückgängig gemacht werden. Vorhandene Einsatzhistorie bleibt dokumentiert.', 'OK – Löschen'))return;
+    await call('deleteUser',{token,id:u.id,confirmName:u.name});
     await refresh();note('Fahrerkonto „'+u.name+'“ entfernt; historische Zuordnungen bleiben erhalten.');
    })
   );box.append(row);
@@ -110,7 +134,7 @@ function renderJobs(){
   controls.append(button('🗺️ Auf Karte',async()=>{window.AGBMeasure.load(j);document.getElementById('measurePanel').scrollIntoView({behavior:'smooth'});note('Einsatz auf Karte geöffnet.')}));
   if(['admin','leader'].includes(user.role)){
    if(j.status==='entwurf')controls.append(button('🟢 Für Fahrer freigeben',async()=>{if(!confirm('Großeinsatz jetzt für zugewiesene Fahrer freigeben?'))return;await call('releaseJob',{token,jobId:j.id});await refresh()}));
-   if(isArchived){controls.append(button('↩ Wieder öffnen',async()=>{if(!confirm('Einsatz wieder aktivieren?'))return;note('Öffne Einsatz „'+j.title+'“ …');await call('reopenJob',{token,jobId:j.id});jobView='active';setJobTab();await refresh();note('Einsatz „'+j.title+'“ wieder geöffnet.')}));controls.append(button('🗑️ Löschen',async()=>{const typed=prompt('Einsatz endgültig löschen? Alle GPS-Punkte und Zuweisungen gehen verloren. Zur Bestätigung exakt den Einsatznamen eingeben: '+j.title);if(typed===null)return;if(typed!==j.title)throw Error('Einsatzname stimmt nicht überein.');if(!confirm('Wirklich endgültig löschen? Dieser Schritt kann nicht rückgängig gemacht werden.'))return;note('Lösche Einsatz „'+j.title+'“ …');await call('deleteJob',{token,jobId:j.id,confirmTitle:typed});await refresh();note('Einsatz „'+j.title+'“ gelöscht.')}));}
+   if(isArchived){controls.append(button('↩ Wieder öffnen',async()=>{if(!await bestaetigen('Einsatz wieder öffnen?', 'Möchtest du „'+j.title+'“ wieder aktivieren?', 'OK – Wieder öffnen'))return;note('Öffne Einsatz „'+j.title+'“ …');await call('reopenJob',{token,jobId:j.id});jobView='active';setJobTab();await refresh();note('Einsatz „'+j.title+'“ wieder geöffnet.')}));controls.append(button('🗑️ Löschen',async()=>{if(!await bestaetigen('Einsatz löschen?', 'Möchtest du „'+j.title+'“ endgültig löschen? Alle zugehörigen GPS-Punkte und Zuweisungen werden entfernt. Dies kann nicht rückgängig gemacht werden.', 'OK – Löschen'))return;note('Lösche Einsatz „'+j.title+'“ …');await call('deleteJob',{token,jobId:j.id,confirmTitle:j.title});await refresh();note('Einsatz „'+j.title+'“ gelöscht.')}));}
    else if(j.status!=='entwurf') controls.append(button('📁 Abschließen',async()=>{if(!confirm('Gesamten Einsatz archivieren? Fahrer können ihn danach nicht mehr bearbeiten.'))return;await call('archiveJob',{token,jobId:j.id});await refresh()}));
   }
   card.append(controls);
